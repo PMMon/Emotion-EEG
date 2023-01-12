@@ -78,7 +78,8 @@ def gen_images(locs, features, n_gridpoints, normalize=True,
     nElectrodes = locs.shape[0]     # Number of electrodes
 
     # Test whether the feature vector length is divisible by number of electrodes
-    assert features.shape[1] % nElectrodes == 0
+    assert features.shape[1] % nElectrodes == 0, f"features shape: {features.shape} not compatible " \
+        f"with number of electrodes: {nElectrodes}."
     n_colors = int(features.shape[1] / nElectrodes)
     for c in range(n_colors):
         feat_array_temp.append(features[:, c * nElectrodes : nElectrodes * (c+1)])

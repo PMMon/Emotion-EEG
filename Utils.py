@@ -34,7 +34,7 @@ from sklearn.preprocessing import scale
 from scipy.signal import resample
 from torch.utils.data import DataLoader, random_split, Subset
 
-'''
+
 def array_to_epochs(data, channels, sampling_frequency, montage='standard_1020', channel_type=['eeg']):
     channel_type = channel_type * len(channels)
     info = mne.create_info(ch_names=channels, sfreq=sampling_frequency, ch_types=channel_type,
@@ -52,7 +52,6 @@ def compute_psd(epoch, fmin=-1., fmax=60.):
     psds, freqs = psd_multitaper(epoch, fmin=fmin, fmax=fmax, n_jobs=10, verbose=50)
     return resample(psds, num=1500, axis=2)[0, :]
 
-'''
 
 def image_generation(feature_matrix, electrodes_loc, n_gridpoints):
     n_electrodes = electrodes_loc.shape[0]  # number of electrodes
