@@ -114,3 +114,6 @@ env/
 
 # data
 data/
+
+# results
+res/
