@@ -16,7 +16,8 @@ You should have received a copy of the GNU Lesser General Public
 License along with this library; if not, write to the Free Software
 Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 '''
-from Models import *
+import os
+from Models_DEAP import *
 from Utils import *
 from Utils_Bashivan import *
 import time
@@ -26,11 +27,12 @@ warnings.simplefilter("ignore")
 
 t = time.time()
 device = torch.device('cuda:0')
+feat_dir = os.path.join("data", "deap", "features")
 
-X_image = np.load('Example_Input/img.npy') # place here the images representation of EEG
-X_array = np.load('Example_Input/array.npy') # place here the array representation of EEG features
-Label = np.load('Example_Input/label.npy') # place here the label for each EEG
-Participant = np.load('Example_Input/participant.npy') # place here the array with each participants
+X_image = np.load(os.path.join(feat_dir, "eeg_images.npy")) # place here the images representation of EEG
+X_array = np.load(os.path.join(feat_dir, "features.npy")) # place here the array representation of EEG features
+Label = np.load(os.path.join(feat_dir, "labels.npy")) # place here the label for each EEG
+Participant = np.load(os.path.join(feat_dir, "participants.npy")) # place here the array with each participants
 
 n_epoch = 150
 
@@ -38,12 +40,12 @@ Dataset = CombDataset(label=Label, image=X_image, array=X_array) #creation of
 #dataset classs in Pytorch
 
 # electrodes locations in 3D -> 2D projection
-locs_3d = np.load('Electroloc/Neuro_loc_SEED_IV.npy')[:31]
+locs_3d = np.load('Electroloc/Neuro_loc_DEAP.npy')
 locs_2d = []
 for e in locs_3d:
     locs_2d.append(azim_proj(e))
 
-for p in range(len(np.unique(Participant))):
+for p in np.unique(Participant):
     print("Training participant ", p)
 
     #Splitting in Train and Testing Set
@@ -58,9 +60,12 @@ for p in range(len(np.unique(Participant))):
     Trainloader = DataLoader(Train, batch_size=128, shuffle=False)
     Testloader = DataLoader(Test, batch_size=128, shuffle=False)
 
+    print(f"len trainloader: {len(Trainloader)}")
+    print(f"len testloader: {len(Testloader)}")
+
     #Set training parameters
     lr = 1e-3
-    wd = 1e-4
+    wd = 1e-6
     mom= 0.9
 
     net = MultiModel().to(device)
@@ -131,7 +136,7 @@ for p in range(len(np.unique(Participant))):
 
         #Evaluation
         net.eval()
-        for j, data in enumerate(Testloader, 0):
+        for j, data in enumerate(Testloader):
             img, arr, label = data
 
             # Prediction
@@ -143,17 +148,20 @@ for p in range(len(np.unique(Participant))):
 
             # Accuracy
             _, predicted = torch.max(pred.cpu().data, 1)
-            evaluation.append((predicted == label).tolist())
+            num_of_true = torch.sum(predicted == label)
+            mean = num_of_true/label.shape[0]
+            evaluation.append(mean)
 
-        validation_loss = validation_loss /(j+1)
-        evaluation = [item for sublist in evaluation for item in sublist]
+        validation_loss = validation_loss / (j+1)
         validation_acc = sum(evaluation) / len(evaluation)
 
         print('[%d, %3d]\tloss: %.3f\tAccuracy : %.3f\t\tval-loss: %.3f\tval-Accuracy : %.3f' %
                       (epoch + 1, n_epoch, running_loss, running_acc, validation_loss, validation_acc))
 
-        Res.append((epoch + 1, n_epoch, running_loss, running_acc, validation_loss, validation_acc))
+        Res.append((epoch + 1, n_epoch, running_loss, running_acc.detach().cpu(), validation_loss, validation_acc))
     path =  'res/sub'+str(p)+'/'
-    np.save(path+'rec_'+str(len(glob.glob(path+'*.npy')))+'_lr_'+str(lr)+'_wd_'+str(wd)+'_mom_'+str(mom), Res)
+    if not os.path.exists(path):
+        os.makedirs(path)
+    np.save(path +'rec_'+ str(len(glob.glob(path +'*.npy')))+ '_lr_'+str(lr)+'_wd_'+str(wd)+'_mom_'+str(mom), Res)
     print('End after_'+str(np.round(time.time() - t, 3))+'\n')
     t = time.time()

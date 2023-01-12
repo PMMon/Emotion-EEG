@@ -16,8 +16,9 @@ You should have received a copy of the GNU Lesser General Public
 License along with this library; if not, write to the Free Software
 Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 '''
+import os
 from statistics import multimode
-from Models import *
+from Models_DEAP import *
 from Utils import *
 from Utils_Bashivan import *
 import time
@@ -27,11 +28,12 @@ warnings.simplefilter("ignore")
 
 t = time.time()
 device = torch.device('cuda:0')
+feat_dir = os.path.join("data", "deap", "features")
 
-X_image = np.load('Example_Input/img.npy') # place here the images representation of EEG
-X_array = np.load('Example_Input/array.npy') # place here the array representation of EEG features
-Label = np.load('Example_Input/label.npy') # place here the label for each EEG
-Participant = np.load('Example_Input/participant.npy') # place here the array with each participants
+X_image = np.load(os.path.join(feat_dir, "eeg_images.npy")) # place here the images representation of EEG
+X_array = np.load(os.path.join(feat_dir, "features.npy")) # place here the array representation of EEG features
+Label = np.load(os.path.join(feat_dir, "labels.npy")) # place here the label for each EEG
+Participant = np.load(os.path.join(feat_dir, "participants.npy")) # place here the array with each participants
 
 n_epoch = 150
 
@@ -39,14 +41,14 @@ Dataset = CombDataset(label=Label, image=X_image, array=X_array) #creation of
 #dataset classs in Pytorch
 
 # electrodes locations in 3D -> 2D projection
-locs_3d = np.load('Electroloc/Neuro_loc_SEED_IV.npy')[:31]
+locs_3d = np.load('Electroloc/Neuro_loc_DEAP.npy')
 locs_2d = []
 for e in locs_3d:
     locs_2d.append(azim_proj(e))
 
 mutl_img = torch.ones((X_image.shape[1], 32, 32)) #initiate the gain matrice
 
-for p in range(len(np.unique(Participant))):
+for p in np.unique(Participant):
     print("Training participant ", p)
 
     #Splitting in Train and Testing Set
@@ -66,7 +68,7 @@ for p in range(len(np.unique(Participant))):
     wd = 1e-4
     mom= 0.9
 
-    net = MultiModel(X_image).to(device)
+    net = MultiModel().to(device)
     #optimizer = optim.SGD(net.parameters(), lr=lr, momentum=mom,  weight_decay=wd)
     optimizer = optim.Adam(net.parameters(), lr=lr,  weight_decay=wd)
 
@@ -161,22 +163,24 @@ for p in range(len(np.unique(Participant))):
             saliency, _ = torch.max(X.grad.data.abs(),dim=2)
             saliency = saliency.mean(axis=0).cpu().detach().numpy()
             saliency[np.isnan(saliency)] = 0
-            saliency = gen_images(np.asarray(locs_2d), saliency.reshape((1,62)), 32)[0,0]
+            saliency = gen_images(np.asarray(locs_2d), saliency.reshape((1,32)), 32)[0,0]
             saliency = np.stack(X_image.shape[1]*[saliency])
             saliency[np.isnan(saliency)] = 0
             saliency = saliency**2
-            saliency = (saliency/saliency.max()+0.05)*2
+            saliency = (saliency/(saliency.max()+0.05))*2
             mutl_img = torch.from_numpy(saliency)
 
         validation_loss = validation_loss /(j+1)
         evaluation = [item for sublist in evaluation for item in sublist]
         validation_acc = sum(evaluation) / len(evaluation)
 
-        print('[%d, %3d] \t loss: %.3f\tAccuracy : %.3f\t\tval-loss: %.3f\tval-Accuracy : %.3f' %
+        print('[%d, %d] \t loss: %.3f\tAccuracy : %.3f\t\tval-loss: %.3f\tval-Accuracy : %.3f' %
                       (epoch + 1, n_epoch, running_loss, running_acc, validation_loss, validation_acc))
 
-        Res.append((epoch + 1, n_epoch, running_loss, running_acc, validation_loss, validation_acc))
+        Res.append((epoch + 1, n_epoch, running_loss, running_acc.detach().cpu(), validation_loss, validation_acc))
     path =  'res/sub'+str(p)+'/'
-    np.save(path+'rec_'+str(len(glob.glob(path+'*.npy')))+'_lr_'+str(lr)+'_wd_'+str(wd)+'_mom_'+str(mom), Res)
+    if not os.path.exists(path):
+        os.makedirs(path)
+    np.save(path +'rec_'+ str(len(glob.glob(path +'*.npy')))+ '_lr_'+str(lr)+'_wd_'+str(wd)+'_mom_'+str(mom), Res)
     print('End after_'+str(np.round(time.time() - t, 3))+'\n')
     t = time.time()
